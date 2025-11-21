@@ -1,0 +1,226 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "mysql"
+}
+
+
+// =======================
+// 1. Admin Model
+// =======================
+model Admin {
+  id         Int      @id @default(autoincrement())
+  username   String   @unique @db.VarChar(100)
+  email      String   @unique @db.VarChar(150)
+  password   String   @db.VarChar(255)
+  status     Status   @default(A)
+  created_at DateTime @default(now()) @db.Timestamp(0)
+  updated_at DateTime @default(now()) @updatedAt @db.Timestamp(0)
+
+  @@map("admin")
+}
+
+// =======================
+// 2. Faculty_Role Model
+// =======================
+model Faculty_Role {
+  id          Int              @id
+  description FacultyRoleType
+  faculties   Faculty[]
+
+  @@map("faculty_role")
+}
+
+// =======================
+// 3. Faculty Model
+// =======================
+model Faculty {
+  id          Int           @id @default(autoincrement())
+  faculty_id  String        @unique @db.VarChar(50)
+  email       String        @unique @db.VarChar(150)
+  username    String        @db.VarChar(100)
+  name        String        @db.VarChar(100)
+  password    String        @db.VarChar(255)
+  status      Status        @default(A)
+  role        Int
+  created_at  DateTime      @default(now()) @db.Timestamp(0)
+  updated_at  DateTime      @default(now()) @updatedAt @db.Timestamp(0)
+  
+  facultyRole       Faculty_Role      @relation(fields: [role], references: [id], onDelete: Restrict)
+  facultyCourses    FacultyCourse[]   // ✅ Added
+  completedTopics   Topic[]           // ✅ Added
+  completedSubtopics SubTopic[]       // ✅ Added
+
+  @@index([role])
+  @@map("faculty")
+}
+
+// =======================
+// 4. Student Model
+// =======================
+model Student {
+  id         Int      @id @default(autoincrement())
+  studentID  String   @unique @db.VarChar(100) @default(cuid())
+  email      String   @unique @db.VarChar(150)
+  name       String   @db.VarChar(100)
+  password   String   @db.VarChar(255)
+  status     Status   @default(A)
+  currentSem String   @db.VarChar(2) @default("01")
+  season     String   @db.VarChar(50)
+  created_at DateTime @default(now()) @db.Timestamp(0)
+  updated_at DateTime @default(now()) @updatedAt @db.Timestamp(0)
+  semester    Semester   @relation(fields: [currentSem], references: [semester_id], onDelete: Restrict) 
+  studentCourses  StudentCourse[]  
+
+  @@index([currentSem])
+  @@index([season])
+  @@map("student")
+}
+
+// =======================
+// Enums
+// =======================
+enum Status {
+  A
+  D
+}
+
+enum FacultyRoleType {
+  HOD
+  TEACHER
+}
+
+// =======================
+// Department Model
+// =======================
+model Department {
+  dept_id   String   @id @db.VarChar(10)
+  dept_name String   @db.VarChar(100)
+  
+  // Relation: Department has many courses
+  courses   Course[]
+  @@map("department")
+}
+
+// =======================
+// Semester Model
+// =======================
+model Semester {
+  semester_id   String    @id @db.VarChar(2)
+  semester_name String    @db.VarChar(20)
+  
+  // Relations
+  courses       Course[]   // Semester has many courses
+  students      Student[]  // Semester has many students
+   @@map("semester")
+}
+
+
+// =======================
+// Course Model
+// =======================
+model Course {
+  course_id   String     @id 
+  course_name String     @db.VarChar(100)
+  semester_id String     @db.VarChar(2)
+  dept_id     String     @db.VarChar(10)
+  
+  department  Department @relation(fields: [dept_id], references: [dept_id], onDelete: Restrict) 
+  semester    Semester   @relation(fields: [semester_id], references: [semester_id], onDelete: Restrict) 
+  facultyCourses  FacultyCourse[]
+  topics          Topic[]
+  studentCourses  StudentCourse[] 
+
+  @@index([dept_id])
+  @@index([semester_id])
+  @@map("course")
+}
+
+
+// =======================
+// Faculty-Course Mapping 
+// =======================
+model FacultyCourse {
+  id         Int      @id @default(autoincrement())
+  facultyId  Int
+  courseId   String      
+  created_at DateTime @default(now()) @db.Timestamp(0)
+
+  faculty    Faculty  @relation(fields: [facultyId], references: [id], onDelete: Cascade)
+  course     Course   @relation(fields: [courseId], references: [course_id], onDelete: Cascade)
+
+  @@unique([facultyId, courseId]) 
+  @@index([facultyId])
+  @@index([courseId])
+  @@map("faculty_course_mapping")
+}
+
+
+// =======================
+// Topic Table
+// =======================
+model Topic {
+  topic_id             Int        @id @default(autoincrement())
+  topic_name           String     @db.VarChar(255)
+  topic_description    String?    @db.Text
+  courseId             String
+  isCompleted          Boolean    @default(false)
+  remark               String?    @db.Text
+  completedByFacultyId Int?
+  completedAt          DateTime?  @db.Timestamp(0)
+
+  course               Course     @relation(fields: [courseId], references: [course_id], onDelete: Cascade)
+  completedByFaculty   Faculty?   @relation(fields: [completedByFacultyId], references: [id], onDelete: SetNull)
+  subtopics            SubTopic[]
+
+  @@index([courseId])
+  @@index([completedByFacultyId])
+  @@map("topic")
+}
+
+
+// =======================
+// Sub-Topic Table 
+// =======================
+model SubTopic {
+  subtopic_id          Int        @id @default(autoincrement())
+  subtopic_name        String     @db.VarChar(255)
+  subtopic_description String?    @db.Text
+  topicId              Int?
+  parentId             Int?
+  isCompleted          Boolean    @default(false)
+  remark               String?    @db.Text
+  completedAt          DateTime?  @db.Timestamp(0)
+  completedByFacultyId Int?
+
+  topic                Topic?     @relation(fields: [topicId], references: [topic_id], onDelete: Cascade)
+  parent               SubTopic?  @relation("SubTopicHierarchy", fields: [parentId], references: [subtopic_id], onDelete: Cascade)
+  children             SubTopic[] @relation("SubTopicHierarchy")
+  completedByFaculty   Faculty?   @relation(fields: [completedByFacultyId], references: [id], onDelete: SetNull)
+
+  @@index([topicId])
+  @@index([parentId])
+  @@index([completedByFacultyId])
+  @@map("subtopic")
+}
+
+// =======================
+// Student-Course Mapping 
+// =======================
+model StudentCourse {
+  id         Int      @id @default(autoincrement())
+  studentId  Int
+  courseId   String
+  created_at DateTime @default(now()) @db.Timestamp(0)
+
+  student    Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  course     Course   @relation(fields: [courseId], references: [course_id], onDelete: Cascade)
+
+  @@unique([studentId, courseId]) 
+  @@index([studentId])
+  @@index([courseId])
+  @@map("student_course_mapping")
+}
